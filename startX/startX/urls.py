@@ -23,5 +23,4 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     # path('web/', include(('app.urls','app'))),
     path('web/', common.urls)
-
 ]
