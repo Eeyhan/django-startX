@@ -12,7 +12,6 @@ from django.db.models import ForeignKey, ManyToManyField
 
 def get_field_display(field_title, field):
     """
-
     :param field_title: 数据库表字段希望显示的表头
     :param field: 数据库表字段
     :return:
@@ -22,6 +21,41 @@ def get_field_display(field_title, field):
         if is_header:
             return field_title
         return getattr(model, 'get_%s_display' % field)
+
+    return inner
+
+
+def get_datetime_format(field_title, field, time_format='%Y-%m-%d'):
+    """
+    :param field_title: 日期时间格式的格式化显示
+    :param field: 数据库表字段
+    :param time_format: 格式
+    :return:
+    """
+
+    def inner(self, model=None, is_header=None):
+        if is_header:
+            return field_title
+        datetime_format = getattr(model, field)
+        return datetime_format.strftime(time_format)
+
+    return inner
+
+
+def get_m2m_display(field_title, field):
+    """
+    :param field_title: 显示manytomany字段的数据
+    :param field: 数据库表字段
+    :param time_format: 格式
+    :return:
+    """
+
+    def inner(self, model=None, is_header=None):
+        if is_header:
+            return field_title
+        query = getattr(model, field).all()
+        m2m_value = [str(row) for row in query]
+        return ','.join(m2m_value)
 
     return inner
 
@@ -42,7 +76,7 @@ class SearchGroupRow(object):
 
     def __iter__(self):
         yield '<div class="whole">'
-        yield self.title
+        yield self.title + ':'
         yield '</div>'
         yield '<div class="others">'
         total_query_dict = self.query_dict.copy()
@@ -161,10 +195,20 @@ class StartXModelForm(forms.ModelForm):
             field.widget.attrs['class'] = 'form-control'
 
 
+class StarkForm(forms.Form):
+    """为数据库统一生成Form的字段添加样式表"""
+
+    def __init__(self, *args, **kwargs):
+        super(StarkForm, self).__init__(*args, **kwargs)
+        # 统一给ModelForm生成字段添加样式
+        for name, field in self.fields.items():
+            field.widget.attrs['class'] = 'form-control'
+
+
 class StartXHandler(object):
     list_display = []  # 数据表的字段
     per_page_count = 10  # 分页器每页显示数量
-    has_add_btn = False  # 添加按钮
+    has_add_btn = True  # 添加按钮
     model_form_class = None  # 数据库表的form
     order_by = None  # 排序参数
     search_list = []  # 搜索关键词
@@ -188,11 +232,15 @@ class StartXHandler(object):
         :return: 显示除了表的字段verbose_name外，自添加字段
         """
 
-        if is_header:
-            return '操作'
+        # if is_header:
+        #     return '操作'
+        #
+        # url_name = reverse('%s:%s' % (self.site.namespace, self.get_change_name), args=(model.pk,))
+        # return mark_safe('<a href="%s">编辑</a>' % url_name)
 
-        url_name = reverse('%s:%s' % (self.site.namespace, self.get_change_name), args=(model.pk,))
-        return mark_safe('<a href="%s">编辑</a>' % url_name)
+        if is_header:
+            return "编辑"
+        return mark_safe('<a href="%s">编辑</a>' % self.reverse_change_url(pk=model.pk))
 
     def display_del(self, model=None, is_header=None):
         """
@@ -201,13 +249,24 @@ class StartXHandler(object):
         :param is_header: 是否是表头字段
         :return: 显示除了表的字段verbose_name外，自添加字段
         """
+        #
+        # if is_header:
+        #     return '操作'
+        # url_name = reverse('%s:%s' % (self.site.namespace, self.get_del_name), args=(model.pk,))
+        #
+        # return mark_safe('<a href="%s">删除</a>' % url_name)
 
+        if is_header:
+            return "删除"
+        return mark_safe('<a href="%s">删除</a>' % self.reverse_delete_url(pk=model.pk))
+
+    def display_edit_del(self, model=None, is_header=None):
         if is_header:
             return '操作'
 
-        url_name = reverse('%s:%s' % (self.site.namespace, self.get_del_name), args=(model.pk,))
-
-        return mark_safe('<a href="%s">删除</a>' % url_name)
+        url_edit_name = reverse('%s:%s' % (self.site.namespace, self.get_change_name), args=(model.pk,))
+        url_del_name = reverse('%s:%s' % (self.site.namespace, self.get_del_name), args=(model.pk,))
+        return mark_safe('<a href="%s">编辑</a> | <a href="%s">删除</a>' % (url_edit_name, url_del_name))
 
     def display_checkbox(self, model=None, is_header=None):
         """
@@ -236,7 +295,9 @@ class StartXHandler(object):
         :return: 为不同权限的用户设置预留的扩展，自定义显示列
         """
         value = []
-        value.extend(self.list_display)
+        if self.list_display:
+            value.extend(self.list_display)
+            value.append(StartXHandler.display_edit_del)
         return value
 
     def get_add_btn(self):
@@ -248,7 +309,7 @@ class StartXHandler(object):
             return '<a class="btn btn-success" href="%s">添加</a>' % self.reverse_add_url()
         return None
 
-    def get_model_form(self):
+    def get_model_form(self, is_add=False):
         if self.model_form_class:
             return self.model_form_class
 
@@ -295,24 +356,44 @@ class StartXHandler(object):
             if not values_list:
                 continue
             condition['%s__in' % option.field] = values_list
-        print(condition)
         return condition
 
-    def reverse_add_url(self):
+    def reverse_commons_url(self, name, *args, **kwargs):
+        name = "%s:%s" % (self.site.namespace, name,)
+        base_url = reverse(name, args=args, kwargs=kwargs)
+        if not self.request.GET:
+            add_url = base_url
+        else:
+            param = self.request.GET.urlencode()
+            new_query_dict = QueryDict(mutable=True)
+            new_query_dict['_filter'] = param
+            add_url = "%s?%s" % (base_url, new_query_dict.urlencode())
+        return add_url
+
+    def reverse_add_url(self, *args, **kwargs):
         """
-        反向解析添加的url
+        生成带有原搜索条件的添加URL
         :return:
         """
-        base_url = reverse('%s:%s' % (self.site.namespace, self.get_add_name))
-        if not self.request.GET:
-            return base_url
+        return self.reverse_commons_url(self.get_add_name, *args, **kwargs)
 
-        # 记住request的参数
-        params = self.request.GET.urlencode()
-        query_dict = QueryDict(mutable=True)
-        query_dict['_filter'] = params
-        query_url = '%s?%s' % (base_url, query_dict.urlencode())
-        return "%s?%s" % (query_url, params,)
+    def reverse_change_url(self, *args, **kwargs):
+        """
+        生成带有原搜索条件的编辑URL
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        return self.reverse_commons_url(self.get_change_name, *args, **kwargs)
+
+    def reverse_delete_url(self, *args, **kwargs):
+        """
+        生成带有原搜索条件的删除URL
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        return self.reverse_commons_url(self.get_del_name, *args, **kwargs)
 
     def reverse_list_url(self):
         """
@@ -335,6 +416,16 @@ class StartXHandler(object):
             return func(request, *args, **kwargs)
 
         return inner
+
+    def get_model_queryset(self, request, *args, **kwargs):
+        """
+        获取数据表对象，预留的钩子函数，子类可以重定义
+        :param reqeust:
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        return self.model_class.objects
 
     def changelist(self, request, *args, **kwargs):
         """
@@ -368,7 +459,10 @@ class StartXHandler(object):
         order_by_field = self.get_order_by()
         # ########## 4. 组合搜索结果 ##########
         search_group_condition = self.get_search_group_condition(request)
-        querySet = self.model_class.objects.filter(conn).filter(**search_group_condition).order_by(*order_by_field)
+
+        current_queryset = self.get_model_queryset(request, *args, **kwargs)
+
+        querySet = current_queryset.filter(conn).filter(**search_group_condition).order_by(*order_by_field)
 
         # ########## 5. 处理分页 ##########
         all_count = querySet.count()
@@ -450,25 +544,25 @@ class StartXHandler(object):
 
     def add_view(self, request, *args, **kwargs):
         """
-
+        添加
         :param request:
         :return:
         """
-        model_class_form = self.get_model_form()
+        model_form_class = self.get_model_form(is_add=True)
 
         if request.method == 'GET':
-            form = model_class_form()
+            form = model_form_class()
             return render(request, 'startX/change.html', {'form': form})
-        form = model_class_form(data=request.POST)
+        form = model_form_class(data=request.POST)
         if form.is_valid():
             self.save(form, is_update=False)
             # 在数据库保存成功后，跳转回列表页面(携带原来的参数)。
             return redirect(self.reverse_list_url())
-        return HttpResponse('<h2>添加页面</h2>')
+        return render(request, 'startX/change.html', {'form': form})
 
     def change_view(self, request, pk, *args, **kwargs):
         """
-
+        修改
         :param request:
         :return:
         """
@@ -476,18 +570,16 @@ class StartXHandler(object):
         current_model_object = self.model_class.objects.filter(pk=pk).first()
         if not current_model_object:
             return HttpResponse('当前选择的对象不存在，请重试')
-        model_form_class = self.get_model_form()
+        model_form_class = self.get_model_form(is_add=False)
         if request.method == 'GET':
             form = model_form_class(instance=current_model_object)
             return render(request, 'startX/change.html', {'form': form})
-
         form = model_form_class(data=request.POST, instance=current_model_object)
-
         if form.is_valid():
             self.save(form, is_update=False)
             # 在数据库保存成功后，跳转回列表页面(携带原来的参数)。
             return redirect(self.reverse_list_url())
-        return render(request, 'startX/change.html', {'form': form})
+        return render(request, 'startX/change.html', {'form': form, 'errors': form.errors})
 
     def delete_view(self, request, pk, *args, **kwargs):
         """
@@ -533,6 +625,14 @@ class StartXHandler(object):
     @property
     def get_del_name(self):
         return self.get_url_name('del')
+
+    # @property
+    # def get_delete_name(self):
+    #     """
+    #     获取删除页面URL的name
+    #     :return:
+    #     """
+    #     return self.get_url_name('delete')
 
     def get_urls(self):
         """预留的重新自定义url钩子函数,主要是覆盖掉默认的url,并设置name别名"""

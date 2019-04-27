@@ -6,6 +6,7 @@
     <title>XX教育后台管理</title>
     <link rel="shortcut icon" href="{% static 'startX/imgs/education.png' %} ">
     <link rel="stylesheet" href="{% static 'startX/plugins/bootstrap/css/bootstrap.css' %} "/>
+    <link rel="stylesheet" href="{% static 'startX/plugins/bootstrap/css/bootstrap-datetimepicker.css' %} "/>
     <link rel="stylesheet" href="{% static 'startX/plugins/font-awesome/css/font-awesome.css' %} "/>
     <link rel="stylesheet" href="{% static 'startX/css/commons.css' %} "/>
     <link rel="stylesheet" href="{% static 'startX/css/nav.css' %} "/>
@@ -175,6 +176,21 @@
 
 <script src="{% static 'startX/js/jquery-3.3.1.min.js' %} "></script>
 <script src="{% static 'startX/plugins/bootstrap/js/bootstrap.js' %} "></script>
+<script src="{% static 'startX/plugins/bootstrap/js/bootstrap-datetimepicker.js' %} "></script>
+<script src="{% static 'startX/plugins/bootstrap/js/locales/bootstrap-datetimepicker.zh-CN.js' %} "></script>
+<script>
+    $('.form_date').datetimepicker({
+        minView: "month",
+        language: "zh-CN",
+        sideBySide: true,
+        format: 'yyyy-mm-dd',
+        bootcssVer: 3,
+        startDate: new Date(),
+        autoclose: true,
+        pickerPosition: "bottom-left"
+    });
+</script>
+
 
 {% block js %} {% endblock %}
 </body>
