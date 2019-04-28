@@ -17,7 +17,7 @@ def get_field_display(field_title, field):
     :return:
     """
 
-    def inner(self, model=None, is_header=None):
+    def inner(self, model=None, is_header=None, *args, **kwargs):
         if is_header:
             return field_title
         return getattr(model, 'get_%s_display' % field)
@@ -33,7 +33,7 @@ def get_datetime_format(field_title, field, time_format='%Y-%m-%d'):
     :return:
     """
 
-    def inner(self, model=None, is_header=None):
+    def inner(self, model=None, is_header=None, *args, **kwargs):
         if is_header:
             return field_title
         datetime_format = getattr(model, field)
@@ -50,7 +50,7 @@ def get_m2m_display(field_title, field):
     :return:
     """
 
-    def inner(self, model=None, is_header=None):
+    def inner(self, model=None, is_header=None, *args, **kwargs):
         if is_header:
             return field_title
         query = getattr(model, field).all()
@@ -215,6 +215,11 @@ class StartXHandler(object):
     action_list = []  # 批量操作字段
     search_group = []  # 组合搜索字段
 
+    list_template = None  # 查看页面模板
+    add_template = None  # 添加页面模板
+    change_template = None  # 编辑页面模板
+    delete_template = None  # 删除页面模板
+
     def __init__(self, site, model_class, prev):
         self.model_class = model_class  # 表对象
         self.prev = prev  # url后缀
@@ -224,51 +229,39 @@ class StartXHandler(object):
     def get_search_group(self):
         return self.search_group
 
-    def display_edit(self, model=None, is_header=None):
+    def display_edit(self, model=None, is_header=None, *args, **kwargs):
         """
 
         :param model: model即数据库表对象
         :param is_header: 是否是表头字段
         :return: 显示除了表的字段verbose_name外，自添加字段
         """
-
-        # if is_header:
-        #     return '操作'
-        #
-        # url_name = reverse('%s:%s' % (self.site.namespace, self.get_change_name), args=(model.pk,))
-        # return mark_safe('<a href="%s">编辑</a>' % url_name)
 
         if is_header:
             return "编辑"
         return mark_safe('<a href="%s">编辑</a>' % self.reverse_change_url(pk=model.pk))
 
-    def display_del(self, model=None, is_header=None):
+    def display_del(self, model=None, is_header=None, *args, **kwargs):
         """
 
         :param model: model即数据库表对象
         :param is_header: 是否是表头字段
         :return: 显示除了表的字段verbose_name外，自添加字段
         """
-        #
-        # if is_header:
-        #     return '操作'
-        # url_name = reverse('%s:%s' % (self.site.namespace, self.get_del_name), args=(model.pk,))
-        #
-        # return mark_safe('<a href="%s">删除</a>' % url_name)
 
         if is_header:
             return "删除"
         return mark_safe('<a href="%s">删除</a>' % self.reverse_delete_url(pk=model.pk))
 
-    def display_edit_del(self, model=None, is_header=None):
+    def display_edit_del(self, model=None, is_header=None, *args, **kwargs):
         if is_header:
             return '操作'
 
-        url_edit_name = reverse('%s:%s' % (self.site.namespace, self.get_change_name), args=(model.pk,))
-        url_del_name = reverse('%s:%s' % (self.site.namespace, self.get_del_name), args=(model.pk,))
-        return mark_safe('<a href="%s">编辑</a> | <a href="%s">删除</a>' % (url_edit_name, url_del_name))
+        tpl = '<a href="%s">编辑</a> <a href="%s">删除</a>' % (
+            self.reverse_change_url(pk=model.pk), self.reverse_delete_url(pk=model.pk))
+        return mark_safe(tpl)
 
-    def display_checkbox(self, model=None, is_header=None):
+    def display_checkbox(self, model=None, is_header=None, *args, **kwargs):
         """
         批量操作前面的checkbox按钮
         :param obj:
@@ -297,16 +290,16 @@ class StartXHandler(object):
         value = []
         if self.list_display:
             value.extend(self.list_display)
-            value.append(StartXHandler.display_edit_del)
+            value.append(type(self).display_edit_del)
         return value
 
-    def get_add_btn(self):
+    def get_add_btn(self, request, *args, **kwargs):
         """
         添加按钮
         :return:
         """
         if self.has_add_btn:
-            return '<a class="btn btn-success" href="%s">添加</a>' % self.reverse_add_url()
+            return '<a class="btn btn-success" href="%s">添加</a>' % self.reverse_add_url(*args, **kwargs)
         return None
 
     def get_model_form(self, is_add=False):
@@ -395,12 +388,13 @@ class StartXHandler(object):
         """
         return self.reverse_commons_url(self.get_del_name, *args, **kwargs)
 
-    def reverse_list_url(self):
+    def reverse_list_url(self, *args, **kwargs):
         """
         反向解析列表的url
         :return:
         """
-        base_url = reverse('%s:%s' % (self.site.namespace, self.get_list_name))
+        url_name = '%s:%s' % (self.site.namespace, self.get_list_name)
+        base_url = reverse(url_name, args=args, kwargs=kwargs)
 
         # 记住request的参数
         params = self.request.GET.get('_filter')
@@ -504,7 +498,7 @@ class StartXHandler(object):
             if list_display:
                 for key_or_func in list_display:
                     if isinstance(key_or_func, FunctionType):
-                        tr_list.append(key_or_func(self, model=item, is_header=False))
+                        tr_list.append(key_or_func(self, model=item, is_header=False, *args, **kwargs))
                     else:
                         tr_list.append(getattr(item, key_or_func))
             else:
@@ -519,25 +513,28 @@ class StartXHandler(object):
             row = option_object.get_queryset_or_tuple(self.model_class, request, *args, **kwargs)
             search_group_row_list.append(row)
 
+        # ########## 8. 添加按钮 #########
+        add_btn = self.get_add_btn(request, *args, **kwargs)
+
         return render(request,
-                      'startX/list.html',
+                      self.list_template or 'startX/list.html',
                       {
                           'data_list': data_list,
                           'header_list': header_list,
                           'body_list': body_list,
                           'pager': pager,
-                          'add_btn': self.get_add_btn(),  # 添加按钮
+                          'add_btn': add_btn,  # 添加按钮
                           'search_list': search_list,  # 搜索字段范围集
                           'query_field': query_field,  # 搜索字段条件
                           'action_dict': action_dict,
                           'search_group_row_list': search_group_row_list
                       })
 
-    def save(self, form, is_update=False):
+    def save(self, request, form, is_update, *args, **kwargs):
         """
         预留钩子函数
         :param form:
-        :param is_update:
+        :param is_update:是否是更新数据，true即为更新，false即为添加数据
         :return:
         """
         form.save()
@@ -552,13 +549,17 @@ class StartXHandler(object):
 
         if request.method == 'GET':
             form = model_form_class()
-            return render(request, 'startX/change.html', {'form': form})
+            print(form)
+            return render(request, self.add_template or 'startX/change.html', {'form': form})
         form = model_form_class(data=request.POST)
         if form.is_valid():
-            self.save(form, is_update=False)
+            response = self.save(request, form, False, *args, **kwargs)
             # 在数据库保存成功后，跳转回列表页面(携带原来的参数)。
-            return redirect(self.reverse_list_url())
+            return response or redirect(self.reverse_list_url(*args, **kwargs))
         return render(request, 'startX/change.html', {'form': form})
+
+    def get_change_object(self, request, pk, *args, **kwargs):
+        return self.model_class.objects.filter(pk=pk).first()
 
     def change_view(self, request, pk, *args, **kwargs):
         """
@@ -567,19 +568,25 @@ class StartXHandler(object):
         :return:
         """
 
-        current_model_object = self.model_class.objects.filter(pk=pk).first()
+        current_model_object = self.get_change_object(request, pk, *args, **kwargs)
         if not current_model_object:
             return HttpResponse('当前选择的对象不存在，请重试')
         model_form_class = self.get_model_form(is_add=False)
         if request.method == 'GET':
             form = model_form_class(instance=current_model_object)
-            return render(request, 'startX/change.html', {'form': form})
+            return render(request, self.change_template or 'startX/change.html', {'form': form})
         form = model_form_class(data=request.POST, instance=current_model_object)
         if form.is_valid():
-            self.save(form, is_update=False)
+            response = self.save(request, form, True, *args, **kwargs)
             # 在数据库保存成功后，跳转回列表页面(携带原来的参数)。
-            return redirect(self.reverse_list_url())
-        return render(request, 'startX/change.html', {'form': form, 'errors': form.errors})
+            return response or redirect(self.reverse_list_url(*args, **kwargs))
+        return render(request, self.change_template or 'startX/change.html', {'form': form, 'errors': form.errors})
+
+    def get_delete_object(self, request, pk, *args, **kwargs):
+        current_model_object = self.model_class.objects.filter(pk=pk).first()
+        if not current_model_object:
+            return HttpResponse('当前选择的对象不存在，请重试')
+        return self.model_class.objects.filter(pk=pk).delete()
 
     def delete_view(self, request, pk, *args, **kwargs):
         """
@@ -587,17 +594,12 @@ class StartXHandler(object):
         :param request:
         :return:
         """
-
-        current_model_object = self.model_class.objects.filter(pk=pk).first()
-        if not current_model_object:
-            return HttpResponse('当前选择的对象不存在，请重试')
-
-        cancel_url = self.reverse_list_url()
+        cancel_url = self.reverse_list_url(*args, **kwargs)
         if request.method == 'GET':
-            return render(request, 'startX/delete.html', {'cancel': cancel_url})
+            return render(request, self.delete_template or 'startX/delete.html', {'cancel': cancel_url})
 
-        self.model_class.objects.filter(pk=pk).delete()
-        return redirect(cancel_url)
+        response = self.get_delete_object(request, pk, *args, **kwargs)
+        return response or redirect(cancel_url)
 
     def get_url_name(self, params):
         """
