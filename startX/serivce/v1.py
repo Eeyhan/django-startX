@@ -282,7 +282,7 @@ class StartXHandler(object):
 
     action_multi_delete.text = "批量删除"
 
-    def get_list_display(self):
+    def get_list_display(self, request, *args, **kwargs):
         """
         预留的钩子函数
         :return: 为不同权限的用户设置预留的扩展，自定义显示列
@@ -302,7 +302,7 @@ class StartXHandler(object):
             return '<a class="btn btn-success" href="%s">添加</a>' % self.reverse_add_url(*args, **kwargs)
         return None
 
-    def get_model_form(self, is_add=False):
+    def get_model_form(self, is_add, request, pk, *args, **kwargs):
         if self.model_form_class:
             return self.model_form_class
 
@@ -477,7 +477,7 @@ class StartXHandler(object):
         # ########## 6. 处理表格 ##########
 
         # 处理表头
-        list_display = self.get_list_display()
+        list_display = self.get_list_display(request, *args, **kwargs)
         header_list = []
 
         if list_display:
@@ -545,11 +545,10 @@ class StartXHandler(object):
         :param request:
         :return:
         """
-        model_form_class = self.get_model_form(is_add=True)
+        model_form_class = self.get_model_form(True, request, None, *args, **kwargs)
 
         if request.method == 'GET':
             form = model_form_class()
-            print(form)
             return render(request, self.add_template or 'startX/change.html', {'form': form})
         form = model_form_class(data=request.POST)
         if form.is_valid():
@@ -571,7 +570,7 @@ class StartXHandler(object):
         current_model_object = self.get_change_object(request, pk, *args, **kwargs)
         if not current_model_object:
             return HttpResponse('当前选择的对象不存在，请重试')
-        model_form_class = self.get_model_form(is_add=False)
+        model_form_class = self.get_model_form(False, request, pk, *args, **kwargs)
         if request.method == 'GET':
             form = model_form_class(instance=current_model_object)
             return render(request, self.change_template or 'startX/change.html', {'form': form})
