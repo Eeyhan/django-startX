@@ -329,7 +329,7 @@ class StartXHandler(object):
         """
         return self.search_list
 
-    def get_action_list(self):
+    def get_action_list(self, request, *args, **kwargs):
         """
         批量操作字段
         :return:
@@ -429,9 +429,11 @@ class StartXHandler(object):
         """
 
         # ########## 1. 批量操作 ##########
-        action_list = self.get_action_list()
-        action_dict = {func.__name__: func.text for func in action_list}
-
+        action_list = self.get_action_list(request, *args, **kwargs)
+        if action_list:
+            action_dict = {func.__name__: func.text for func in action_list}
+        else:
+            action_dict = None
         if request.method == 'POST':
             action_func_name = request.POST.get('action')
             if action_func_name and action_func_name in action_dict:
@@ -582,10 +584,11 @@ class StartXHandler(object):
         return render(request, self.change_template or 'startX/change.html', {'form': form, 'errors': form.errors})
 
     def get_delete_object(self, request, pk, *args, **kwargs):
-        current_model_object = self.model_class.objects.filter(pk=pk).first()
-        if not current_model_object:
-            return HttpResponse('当前选择的对象不存在，请重试')
-        return self.model_class.objects.filter(pk=pk).delete()
+        # current_model_object = self.model_class.objects.filter(pk=pk).first()
+        # if not current_model_object:
+        #     return HttpResponse('当前选择的对象不存在，请重试')
+        # return self.model_class.objects.filter(pk=pk).delete()
+        self.model_class.objects.filter(pk=pk).delete()
 
     def delete_view(self, request, pk, *args, **kwargs):
         """
